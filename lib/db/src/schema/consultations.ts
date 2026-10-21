@@ -1,0 +1,32 @@
+import { pgTable, text, uuid, timestamp, boolean } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+export const consultationsTable = pgTable("consultation_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  name: text("name").notNull(),
+  phone: text("phone").notNull(),
+  email: text("email").notNull(),
+  company: text("company").notNull(),
+  problem: text("problem").notNull(),
+  description: text("description").notNull().default(""),
+  status: text("status").notNull().default("new"),
+  source: text("source").notNull().default("form"),
+  whatsapp: text("whatsapp"),
+  ip: text("ip"),
+  country: text("country"),
+  countryCode: text("country_code"),
+  city: text("city"),
+  device: text("device"),
+  browser: text("browser"),
+  os: text("os"),
+  language: text("language"),
+  referrer: text("referrer"),
+  utmSource: text("utm_source"),
+  utmMedium: text("utm_medium"),
+  utmCampaign: text("utm_campaign"),
+  consent: boolean("consent").notNull(),
+  consentVersion: text("consent_version").notNull().default("2026-10-13"),
+  idempotencyKey: uuid("idempotency_key").notNull().unique(),
+  fingerprint: text("fingerprint").notNull().unique(),
+});
+export const insertConsultationSchema = createInsertSchema(consultationsTable).omit({ id: true, createdAt: true });

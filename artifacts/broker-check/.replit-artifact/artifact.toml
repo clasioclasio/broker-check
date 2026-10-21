@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "BROKER CHECK"
+description = "Русскоязычная платформа предварительной проверки брокеров с прозрачным демонстрационным анализом и сохранением заявок на юридическую консультацию."
+version = "1.0.0"
+id = "artifacts/broker-check"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 23001
+
+[services.development]
+run = "pnpm --filter @workspace/broker-check run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/broker-check", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/broker-check/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "23001"
+BASE_PATH = "/"

@@ -1,0 +1,436 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+paths:
+  /admin/login:
+    post:
+      operationId: adminLogin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AdminCredentials" }
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSession" }
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSession" }
+  /admin/me:
+    get:
+      operationId: adminMe
+      responses:
+        "200":
+          description: Current administrator
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSession" }
+  /leads:
+    get:
+      operationId: listLeads
+      responses:
+        "200":
+          description: Administrator only
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Lead" }
+  /leads/import:
+    post:
+      operationId: importLeads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadImport" }
+      responses:
+        "200":
+          description: Import summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ImportSummary" }
+  /leads/me:
+    get:
+      operationId: getCurrentLead
+      responses:
+        "200":
+          description: Signed cookie owner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lead" }
+  /leads/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getLead
+      responses:
+        "200":
+          description: Administrator or owner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lead" }
+    delete:
+      operationId: deleteLead
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminSession" }
+  /leads/{id}/status:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    patch:
+      operationId: updateLeadStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LeadStatusUpdate" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Lead" }
+  /leads/{id}/messages:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: listLeadMessages
+      responses:
+        "200":
+          description: Administrator or signed cookie owner
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Message" }
+    post:
+      operationId: createLeadMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessageInput" }
+      responses:
+        "200":
+          description: Saved message
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+  /analytics/collect:
+    post:
+      operationId: collectTraffic
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrafficCollect" }
+      responses:
+        "200": { description: Recorded }
+        "204": { description: Tracking disabled }
+  /analytics/consent:
+    delete:
+      operationId: revokeTrafficConsent
+      responses:
+        "200": { description: History removed }
+  /admin/traffic:
+    get:
+      operationId: getTrafficReport
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+        - { name: source, in: query, schema: { type: string } }
+        - { name: campaign, in: query, schema: { type: string } }
+        - { name: device, in: query, schema: { type: string } }
+        - { name: country, in: query, schema: { type: string } }
+        - { name: page, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Real traffic report
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /admin/traffic/export:
+    get:
+      operationId: exportTrafficCsv
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+        - { name: source, in: query, schema: { type: string } }
+        - { name: campaign, in: query, schema: { type: string } }
+        - { name: device, in: query, schema: { type: string } }
+        - { name: country, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: CSV export
+          content:
+            text/csv:
+              schema: { type: string }
+  /checks:
+    post:
+      operationId: createCheck
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckInput" }
+      responses:
+        "201":
+          description: Preliminary report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckReport" }
+  /checks/{id}:
+    get:
+      operationId: getCheck
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Saved report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckReport" }
+  /consultations:
+    post:
+      operationId: createConsultation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConsultationInput" }
+      responses:
+        "201":
+          description: Saved request
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ConsultationReceipt" }
+  /platform:
+    get:
+      operationId: getPlatform
+      responses:
+        "200":
+          description: Transparent source coverage and methodology
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PlatformInfo" }
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+components:
+  schemas:
+    AdminCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 200 }
+        password: { type: string, minLength: 1, maxLength: 500 }
+    AdminSession:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        role: { type: string }
+    LeadStatusUpdate:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [new, in_progress, closed] }
+    LeadImport:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 15000
+          items:
+            type: object
+            additionalProperties: true
+    ImportSummary:
+      type: object
+      required: [imported, duplicates, invalid, total]
+      properties:
+        imported: { type: integer }
+        duplicates: { type: integer }
+        invalid: { type: integer }
+        total: { type: integer }
+    Lead:
+      type: object
+      required: [id, name, email, description, status, source, createdAt, company, problem]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string }
+        whatsapp: { type: [string, "null"] }
+        phone: { type: [string, "null"] }
+        description: { type: string }
+        company: { type: string }
+        problem: { type: string }
+        status: { type: string }
+        source: { type: string }
+        createdAt: { type: string, format: date-time }
+        ip: { type: [string, "null"] }
+        country: { type: [string, "null"] }
+        countryCode: { type: [string, "null"] }
+        city: { type: [string, "null"] }
+        device: { type: [string, "null"] }
+        browser: { type: [string, "null"] }
+        os: { type: [string, "null"] }
+        language: { type: [string, "null"] }
+        referrer: { type: [string, "null"] }
+        utmSource: { type: [string, "null"] }
+        utmMedium: { type: [string, "null"] }
+        utmCampaign: { type: [string, "null"] }
+    MessageInput:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 10000 }
+    Message:
+      type: object
+      required: [id, leadId, sender, text, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        leadId: { type: string, format: uuid }
+        sender: { type: string, enum: [user, manager] }
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+        attachmentUrl: { type: [string, "null"] }
+        attachmentName: { type: [string, "null"] }
+    TrafficCollect:
+      type: object
+      required: [consent, events]
+      properties:
+        consent: { type: boolean, description: Permission for optional external services, not internal analytics }
+        path: { type: string, maxLength: 300, default: / }
+        referrer: { type: string, maxLength: 500 }
+        language: { type: string, maxLength: 40 }
+        timezone: { type: string, maxLength: 80 }
+        screen: { type: string, maxLength: 30 }
+        utmSource: { type: string, maxLength: 160 }
+        utmMedium: { type: string, maxLength: 160 }
+        utmCampaign: { type: string, maxLength: 160 }
+        utmContent: { type: string, maxLength: 160 }
+        utmTerm: { type: string, maxLength: 160 }
+        hasFbclid: { type: boolean }
+        hasGclid: { type: boolean }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            type: object
+            required: [id, kind]
+            properties:
+              id: { type: string, format: uuid }
+              kind: { type: string, enum: [pageview, heartbeat, scroll, cta_click, form_start, form_error] }
+              path: { type: string, maxLength: 300 }
+              value: { type: integer, minimum: 0, maximum: 86400, default: 0 }
+    CheckInput:
+      type: object
+      required: [company]
+      properties:
+        company: { type: string, minLength: 2, maxLength: 200 }
+    ReportSection:
+      type: object
+      required: [title, content]
+      properties:
+        title: { type: string }
+        content: { type: string }
+    CheckReport:
+      type: object
+      required: [id, company, createdAt, status, demo, disclaimer, sections, recommendations]
+      properties:
+        id: { type: string }
+        company: { type: string }
+        createdAt: { type: string, format: date-time }
+        status: { type: string, enum: [insufficient_data, confirmed_risks, regulatory_warning] }
+        demo: { type: boolean }
+        disclaimer: { type: string }
+        sections:
+          type: array
+          items: { $ref: "#/components/schemas/ReportSection" }
+        recommendations:
+          type: array
+          items: { type: string }
+    ConsultationInput:
+      type: object
+      required: [name, phone, email, company, problem, consent, idempotencyKey]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 100 }
+        phone: { type: string, pattern: '^\+[1-9][0-9]{3,14}$', description: "Valid phone number from any country or territory in E.164 format. Country and number validity are checked by the server." }
+        email: { type: string, format: email, maxLength: 254 }
+        company: { type: string, minLength: 2, maxLength: 200 }
+        problem:
+          type: string
+          enum: [withdrawal, blocked, payments, no_response, license, before_cooperation, other]
+        description: { type: string, maxLength: 5000 }
+        consent: { type: boolean }
+        idempotencyKey: { type: string, format: uuid }
+        website: { type: string, maxLength: 0 }
+    ConsultationReceipt:
+      type: object
+      required: [id, createdAt, message]
+      properties:
+        id: { type: string }
+        createdAt: { type: string, format: date-time }
+        message: { type: string }
+    SourceLink:
+      type: object
+      required: [name, url, description]
+      properties:
+        name: { type: string }
+        url: { type: string }
+        description: { type: string }
+    PlatformInfo:
+      type: object
+      required: [mode, notice, stages, sources]
+      properties:
+        mode: { type: string, enum: [demo] }
+        notice: { type: string }
+        stages:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/SourceLink" }
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
