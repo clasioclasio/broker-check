@@ -14,6 +14,8 @@ export * from './checkReportStatus';
 export * from './consultationInput';
 export * from './consultationInputProblem';
 export * from './consultationReceipt';
+export * from './createConsultation409';
+export * from './createConsultation409Code';
 export * from './exportTrafficCsvParams';
 export * from './getTrafficReport200';
 export * from './getTrafficReportParams';

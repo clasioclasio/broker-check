@@ -21,6 +21,7 @@ class InstallerTests(unittest.TestCase):
     def test_syntax(self):
         subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
         subprocess.run(["bash", "-n", str(ROOT / "install.sh")], check=True)
+        subprocess.run(["bash", "-n", str(ROOT / "deployment/update.sh")], check=True)
 
     def test_help_does_not_install(self):
         result = subprocess.run(["bash", str(SCRIPT), "--help"],
