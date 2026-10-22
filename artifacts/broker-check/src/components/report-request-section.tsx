@@ -21,7 +21,7 @@ function Lbl({ htmlFor, children }: { htmlFor: string; children: string }) {
 }
 
 export function ReportRequestSection({ reportId, company }: { reportId: string; company: string }) {
-  const { draft, patch, setPhone, submit, restart, pendingId, failedId } = useReportRequest();
+  const { draft, patch, setPhone, submit, submitted, checking, pendingId, failedId } = useReportRequest();
   const d = draft(reportId);
   const pending = pendingId === reportId;
   const failed = failedId === reportId;
@@ -39,13 +39,13 @@ export function ReportRequestSection({ reportId, company }: { reportId: string; 
           <p className="mt-4 max-w-md text-base leading-relaxed text-foreground">Автоматической отправки нет. Срок зависит от рассмотрения и не гарантируется.</p>
         </div>
         <div id="report-request-form" className="min-w-0 scroll-mt-48 rounded-lg bg-background shadow-sm ring-1 ring-border">
-          {d.receipt ? (
+          {checking ? <p className="p-8" role="status">Проверяем статус заявки…</p> : d.receipt || submitted ? (
             <div className="p-6 sm:p-10" role="status" aria-live="polite" data-testid="status-report-request-success">
               <span className="grid h-14 w-14 place-items-center rounded-full bg-primary text-accent"><Check className="h-8 w-8" /></span>
               <h3 id="rr-success-title" tabIndex={-1} className="hd mt-6 text-2xl text-primary sm:text-3xl">Заявка принята на рассмотрение</h3>
               <p className="mt-4 text-lg leading-relaxed text-foreground">Специалист рассмотрит обращение и направит подготовленный отчёт в WhatsApp на указанный номер. Ожидайте отчёт в WhatsApp.</p>
-              <p className="mt-3 text-base text-muted-foreground">Срок зависит от рассмотрения. Номер заявки: <span className="font-mono" data-testid="text-report-request-id">{d.receipt.id}</span></p>
-              <button type="button" onClick={() => restart(reportId)} className="hard-btn mt-8 h-14 bg-primary px-6 text-lg font-semibold text-primary-foreground" data-testid="button-new-report-request">Новая заявка</button>
+              {d.receipt && <p className="mt-3 text-base text-muted-foreground">Срок зависит от рассмотрения. Номер заявки: <span className="font-mono" data-testid="text-report-request-id">{d.receipt.id}</span></p>}
+              <p className="mt-4 text-lg font-semibold text-primary">Заявка уже принята. Повторная отправка недоступна.</p>
               <ClientMessages />
             </div>
           ) : (

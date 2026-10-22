@@ -226,6 +226,16 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ConsultationReceipt" }
+        "409":
+          description: A request was already submitted, or an idempotency key was reused
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: { type: string }
+                  code: { type: string, enum: [ALREADY_SUBMITTED] }
   /platform:
     get:
       operationId: getPlatform

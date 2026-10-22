@@ -6,6 +6,7 @@ import { Eyebrow } from '@/components/guides';
 import { ClientMessages } from '@/components/client-messages';
 import { flushTraffic, trackTraffic } from '@/lib/traffic-tracker';
 import { saveCompany } from '@/lib/company';
+import { isDuplicateSubmission, useSubmissionLock } from '@/lib/submission-lock';
 import { PHONE_COUNTRIES, callingCode, extractNational, formatNational, phoneError, validatePhone, type PhoneCountry } from '@/lib/phone';
 
 type Problem = ConsultationInput['problem'];
@@ -29,7 +30,7 @@ interface Ctx {
   open: (prefillCompany?: string) => void;
   s: {
     company: string; name: string; email: string; country: PhoneCountry; digits: string; problem: Problem | ''; description: string;
-    website: string; errors: Errors; done: boolean; pending: boolean; failed: boolean;
+    website: string; errors: Errors; done: boolean; checking: boolean; pending: boolean; failed: boolean;
   };
   set: {
     company: (v: string) => void; name: (v: string) => void; email: (v: string) => void; country: (v: PhoneCountry) => void;
@@ -37,7 +38,6 @@ interface Ctx {
     website: (v: string) => void;
   };
   submit: (e: React.FormEvent) => void;
-  restart: () => void;
 }
 const ConsultationContext = createContext<Ctx | null>(null);
 
@@ -48,6 +48,7 @@ export const useConsultation = () => {
 };
 
 export function ConsultationProvider({ children }: { children: ReactNode }) {
+  const submission = useSubmissionLock();
   const [company, setCompany] = useState('');
   const [name, setName] = useState('');
   const [country, setCountry] = useState<PhoneCountry>('US');
@@ -61,7 +62,6 @@ export function ConsultationProvider({ children }: { children: ReactNode }) {
   const keyRef = useRef<string>(crypto.randomUUID());
   const submitting = useRef(false);
   const mutation = useCreateConsultation();
-  const resetMutation = mutation.reset;
 
   const clear = (f: Field) => setErrors((e) => (e[f] ? { ...e, [f]: undefined } : e));
 
@@ -73,16 +73,9 @@ export function ConsultationProvider({ children }: { children: ReactNode }) {
     document.getElementById('cf-name')?.focus({ preventScroll: true });
   }, []);
 
-  const restart = useCallback(() => {
-    setName(''); setDigits(''); setEmail(''); setProblem(''); setDescription(''); setWebsite('');
-    setErrors({}); setDone(false);
-    resetMutation();
-    keyRef.current = crypto.randomUUID();
-  }, [resetMutation]);
-
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting.current || mutation.isPending) return;
+    if (submitting.current || mutation.isPending || submission.checking || submission.submitted) return;
     const phone = validatePhone(digits, country);
     const errs: Errors = {};
     if (name.trim().length < 2) errs.name = 'Укажите имя: не короче 2 символов';
@@ -114,7 +107,8 @@ export function ConsultationProvider({ children }: { children: ReactNode }) {
         },
       },
       {
-        onSuccess: () => { saveCompany(company.trim()); setDone(true); },
+        onSuccess: () => { saveCompany(company.trim()); setDone(true); submission.lock(); },
+        onError: (error) => { if (isDuplicateSubmission(error)) submission.lock(); },
         onSettled: () => { submitting.current = false; },
       },
     ));
@@ -122,7 +116,7 @@ export function ConsultationProvider({ children }: { children: ReactNode }) {
 
   const value: Ctx = {
     open,
-    s: { company, name, email, country, digits, problem, description, website, errors, done, pending: mutation.isPending, failed: mutation.isError },
+    s: { company, name, email, country, digits, problem, description, website, errors, done: done || submission.submitted, checking: submission.checking, pending: mutation.isPending, failed: mutation.isError },
     set: {
       company: (v) => { setCompany(v); clear('company'); },
       name: (v) => { setName(v); clear('name'); },
@@ -134,7 +128,6 @@ export function ConsultationProvider({ children }: { children: ReactNode }) {
       website: setWebsite,
     },
     submit,
-    restart,
   };
   // open is stable; the rest changes with the draft
   const ctx = useMemo(() => value, [value]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -156,7 +149,7 @@ function Lbl({ htmlFor, n, children, optional }: { htmlFor: string; n: string; c
 }
 
 export function ConsultationSection({ company: prefill }: { company?: string }) {
-  const { s, set, submit, restart } = useConsultation();
+  const { s, set, submit } = useConsultation();
   const applied = useRef('');
   const setCompanyRef = useRef(set.company);
   setCompanyRef.current = set.company;
@@ -183,13 +176,13 @@ export function ConsultationSection({ company: prefill }: { company?: string }) 
         </div>
 
         <div className="min-w-0 rounded-lg bg-background text-foreground shadow-sm ring-1 ring-border">
-          {s.done ? (
+          {s.checking ? <p className="p-8" role="status">Проверяем статус заявки…</p> : s.done ? (
             <div className="p-6 sm:p-10" data-testid="status-consultation-success" role="status" aria-live="polite">
               <span className="grid h-14 w-14 place-items-center rounded-full bg-primary text-accent"><Check className="h-8 w-8" /></span>
               <h3 className="hd mt-6 text-3xl text-primary sm:text-4xl">Запрос сохранён</h3>
               <p className="mt-4 text-lg leading-relaxed text-muted-foreground">Ваш запрос успешно отправлен. Специалист свяжется с вами по указанным контактным данным.</p>
               <p className="mt-3 rounded-md bg-secondary/70 p-3 text-base leading-relaxed text-muted-foreground">Запрос записан в базу данных платформы. Автоматических уведомлений на почту эта форма не отправляет; срок ответа не гарантируется.</p>
-              <button type="button" onClick={restart} className="hard-btn mt-8 h-12 bg-primary px-6 text-lg font-semibold text-primary-foreground" data-testid="button-new-request">Отправить новый запрос</button>
+              <p className="mt-4 text-lg font-semibold text-primary">Заявка уже принята. Повторная отправка недоступна.</p>
               <ClientMessages />
             </div>
           ) : (

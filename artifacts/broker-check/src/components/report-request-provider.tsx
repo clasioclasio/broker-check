@@ -4,6 +4,7 @@ import { useCreateConsultation } from '@workspace/api-client-react';
 import type { ConsultationReceipt } from '@workspace/api-client-react';
 import { createReportRequest } from '@/lib/report-request';
 import { extractNational, phoneError, validatePhone, type PhoneCountry } from '@/lib/phone';
+import { isDuplicateSubmission, useSubmissionLock } from '@/lib/submission-lock';
 
 export type Field = 'name' | 'email' | 'phone';
 export type Errors = Partial<Record<Field, string>>;
@@ -15,7 +16,8 @@ interface Ctx {
   patch: (id: string, p: Partial<Draft>) => void;
   setPhone: (id: string, raw: string) => void;
   submit: (id: string, company: string) => void;
-  restart: (id: string) => void;
+  submitted: boolean;
+  checking: boolean;
   pendingId: string | null;
   failedId: string | null;
 }
@@ -23,6 +25,7 @@ const C = createContext<Ctx | null>(null);
 export const useReportRequest = () => { const c = useContext(C); if (!c) throw new Error('ReportRequestProvider missing'); return c; };
 
 export function ReportRequestProvider({ children }: { children: ReactNode }) {
+  const submission = useSubmissionLock();
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [failedId, setFailedId] = useState<string | null>(null);
@@ -30,7 +33,6 @@ export function ReportRequestProvider({ children }: { children: ReactNode }) {
   const draftsRef = useRef(drafts); draftsRef.current = drafts;
   const mutation = useCreateConsultation();
   const mutate = useRef(mutation.mutate); mutate.current = mutation.mutate;
-  const reset = useRef(mutation.reset); reset.current = mutation.reset;
 
   const draft = useCallback((id: string) => drafts[id] ?? fresh(), [drafts]);
   const patch = useCallback((id: string, p: Partial<Draft>) => {
@@ -41,7 +43,7 @@ export function ReportRequestProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const submit = useCallback((id: string, company: string) => {
-    if (busy.current) return;
+    if (busy.current || submission.submitted || submission.checking) return;
     const d = draftsRef.current[id] ?? fresh();
     const phone = validatePhone(d.digits, d.country);
     const errors: Errors = {};
@@ -60,17 +62,15 @@ export function ReportRequestProvider({ children }: { children: ReactNode }) {
       // The submit action follows the visible consent notice below the button.
       { data: { name: d.name.trim(), email: d.email.trim(), phone, company, problem: 'other', description: createReportRequest(company), consent: true, idempotencyKey: d.key, website: d.website } },
       {
-        onSuccess: (receipt) => { patch(id, { receipt }); },
-        onError: () => { setFailedId(id); window.setTimeout(() => document.getElementById('rr-name')?.focus(), 0); },
+        onSuccess: (receipt) => { patch(id, { receipt }); submission.lock(); },
+        onError: (error) => {
+          if (isDuplicateSubmission(error)) { submission.lock(); return; }
+          setFailedId(id); window.setTimeout(() => document.getElementById('rr-name')?.focus(), 0);
+        },
         onSettled: () => { busy.current = false; setPendingId(null); },
       },
     ));
-  }, [patch]);
+  }, [patch, submission.submitted, submission.checking, submission.lock]);
 
-  const restart = useCallback((id: string) => {
-    setDrafts((d) => ({ ...d, [id]: fresh() }));
-    setFailedId(null); reset.current();
-  }, []);
-
-  return <C.Provider value={{ draft, patch, setPhone, submit, restart, pendingId, failedId }}>{children}</C.Provider>;
+  return <C.Provider value={{ draft, patch, setPhone, submit, submitted: submission.submitted, checking: submission.checking, pendingId, failedId }}>{children}</C.Provider>;
 }

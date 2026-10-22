@@ -301,3 +301,15 @@ device?: string;
 country?: string;
 };
 
+export type CreateConsultation409Code = typeof CreateConsultation409Code[keyof typeof CreateConsultation409Code];
+
+
+export const CreateConsultation409Code = {
+  ALREADY_SUBMITTED: 'ALREADY_SUBMITTED',
+} as const;
+
+export type CreateConsultation409 = {
+  error: string;
+  code?: CreateConsultation409Code;
+};
+

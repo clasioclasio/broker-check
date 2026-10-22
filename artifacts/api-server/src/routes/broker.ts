@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { createHash } from "node:crypto";
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { db, checksTable, consultationsTable } from "@workspace/db";
 import { CreateCheckBody, GetCheckParams, CreateConsultationBody, CreateCheckResponse, GetCheckResponse, CreateConsultationResponse, GetPlatformResponse } from "@workspace/api-zod";
 import { report, platform } from "../lib/report";
@@ -46,12 +46,36 @@ router.post("/consultations", rateLimit(5, 900_000), async (req, res): Promise<v
   const fingerprint = createHash("sha256").update(JSON.stringify({
     ...data, description: data.description ?? "", day: new Date().toISOString().slice(0, 10),
   })).digest("hex");
-  const [inserted] = await db.insert(consultationsTable)
-    .values({ ...await leadMetadata(req), ...data, whatsapp: data.phone, idempotencyKey, fingerprint })
-    .onConflictDoNothing().returning();
-  const saved = inserted ?? (await db.select().from(consultationsTable).where(
-    or(eq(consultationsTable.idempotencyKey, idempotencyKey), eq(consultationsTable.fingerprint, fingerprint)),
-  ))[0];
+  const metadata = await leadMetadata(req);
+  const result = await db.transaction(async tx => {
+    // Shared with CSV imports: parallel tabs, API calls and imports cannot race.
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(748201530)`);
+    const [retry] = await tx.select().from(consultationsTable)
+      .where(eq(consultationsTable.idempotencyKey, idempotencyKey));
+    if (retry) return { saved: retry, inserted: false, duplicate: false };
+    const owner = req.signedCookies?.broker_lead_id;
+    const phoneDigits = data.phone.replace(/\D/g, "");
+    const [existing] = await tx.select({ id: consultationsTable.id }).from(consultationsTable).where(or(
+      sql`lower(btrim(${consultationsTable.email})) = ${data.email.toLowerCase()}`,
+      sql`regexp_replace(${consultationsTable.phone}, '[^0-9]', '', 'g') = ${phoneDigits}`,
+      sql`regexp_replace(coalesce(${consultationsTable.whatsapp}, ''), '[^0-9]', '', 'g') = ${phoneDigits}`,
+      typeof owner === "string" ? sql`${consultationsTable.id}::text = ${owner}` : sql`false`,
+    )).limit(1);
+    if (existing) return { saved: undefined, inserted: false, duplicate: true };
+    const [inserted] = await tx.insert(consultationsTable)
+      .values({ ...metadata, ...data, whatsapp: data.phone, idempotencyKey, fingerprint })
+      .onConflictDoNothing().returning();
+    return { saved: inserted, inserted: !!inserted, duplicate: false };
+  });
+  if (result.duplicate) {
+    // A contact match is not identity verification: do not disclose a lead ID,
+    // its contents, or grant access to its private conversation.
+    res.status(409).json({
+      code: "ALREADY_SUBMITTED",
+      error: "Заявка уже принята. Повторная отправка недоступна. Ожидайте ответа специалиста.",
+    }); return;
+  }
+  const { saved, inserted } = result;
   if (!saved || (saved.fingerprint !== fingerprint)) {
     res.status(409).json({ error: "Этот ключ уже использован для другого запроса. Откройте форму заново." }); return;
   }
